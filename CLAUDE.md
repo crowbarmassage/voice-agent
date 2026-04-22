@@ -68,7 +68,7 @@ See `docs/RCM_VOICE_AGENTS.md` for all tiers and the full feature requirements.
 | Telephony | Twilio HIPAA | BAA available, Media Streams for audio |
 | STT | Granite 4.0 1b Speech (mlx-audio) or cloud STT with BAA | Keyword biasing for medical terms |
 | TTS | OmniVoice or cloud TTS | Professional, telephony-optimized voice |
-| Brain | TBD — Claude API, Gemma, or fine-tuned smaller model | Needs BAA if cloud; needs <2s latency |
+| Brain | Claude API (Anthropic) — v1 default | BAA available, best instruction-following for script execution, streaming |
 | VAD | Silero VAD | Lightweight, MIT, runs on CPU |
 | Queue | Postgres | Work items, dispositions, audit log |
 | Monitoring | Grafana + Postgres | Call dashboard, metrics |
@@ -102,9 +102,22 @@ voice-agent/
 ├── docs/
 │   ├── RCM_VOICE_AGENTS.md     # master requirements + use case tiers
 │   ├── TIER1_FEATURES.md       # 42-feature breakdown for Tier 1
-│   └── STT_FEATURES.md         # STT backend comparison + swappable architecture
+│   ├── STT_FEATURES.md         # STT backend comparison + swappable architecture
+│   └── PROJECT_REVIEW_AND_PLAN.md  # gap analysis, phased plan, prioritized backlog
+├── simulator/                   # call simulator (fake Twilio Media Streams endpoint)
 └── scripts/                     # utility scripts (db setup, payor profile tools)
 ```
+
+## Key decisions made
+
+- **Brain: Claude API (Anthropic) for v1.** Best instruction-following for
+  script execution, streaming for low latency, managed infra. BAA available.
+  Local models (Gemma-4) reserved for v2 cost optimization evaluation.
+- **Shadow mode mandatory.** v1 never writes to billing system automatically.
+  Human reviews all dispositions.
+- **Call simulator before live calls.** All IVR/hold/conversation development
+  iterates against a simulator built from recorded real calls. Saves hours
+  of payor hold time per test cycle.
 
 ## Conventions
 
@@ -116,19 +129,35 @@ voice-agent/
   from claim context without the guardrail layer.
 - Audit log writes go through `compliance/audit.py` — immutable, append-only.
 - Tests mirror `src/` structure in `tests/`.
+- The call simulator lives in `simulator/` and speaks the Twilio Media Streams
+  WebSocket protocol so the same code runs against simulated and real calls.
 
-## Build order (from TIER1_FEATURES.md §J)
+## Build order (from PROJECT_REVIEW_AND_PLAN.md, revised)
 
-1. Telephony hello-world (place call, play TTS, record, hang up)
-2. Audio pipeline (bidirectional: send TTS to call, receive + transcribe)
-3. IVR navigator for one payor (highest-volume)
-4. Hold handler (detect hold, wait, detect human pickup)
-5. Claim status script + brain (live call in shadow mode)
-6. Entity extraction + disposition logging
-7. Dashboard + review UI
-8. Shadow mode on 3 payors (2 weeks)
-9. Expand to 1B/1C/1D scripts
-10. Promote to production (enable write-back for high-confidence dispositions)
+### Phase 0 — Foundation (Week 0–1)
+0. Start Twilio HIPAA provisioning + BAA (long-pole dependency)
+1. Commit to Claude API as v1 brain; begin Anthropic BAA
+2. Revise protocol signatures (Telephony, STT, Brain — current stubs incomplete)
+3. DB schema + migrations (Alembic)
+4. Structured logging + metrics scaffolding
+5. Core compliance tests (PHI whitelist, queue transitions)
+6. Record 5–10 real claim status calls for ground-truth data
+
+### Phase 1 — Tier 1A thin vertical (Week 1–3)
+1. Build call simulator (fake Twilio Media Streams endpoint from recordings)
+2. Telephony integration (Twilio — outbound, DTMF, audio streaming)
+3. Session state machine
+4. Audio pipeline (G.711, resampling, VAD)
+5. Single STT + TTS wired end-to-end
+6. One payor IVR state machine (from annotated recordings)
+7. Claim status script + brain (Claude API)
+8. Disposition + audit writes
+
+### Phase 2 — Reliability + compliance hardening (Week 3–5)
+### Phase 3 — Expand scope (Week 5+)
+
+See `docs/PROJECT_REVIEW_AND_PLAN.md` for full details, exit criteria, and
+success metrics.
 
 ## Related projects
 

@@ -498,17 +498,30 @@ is reached.
 
 ### F7. Brain service
 - Hosts the conversation LLM. Receives: system prompt (with script + claim
-  context) + conversation history + latest counterparty utterance. Returns:
-  agent's next response.
-- For v1: Gemma-4 or a smaller fine-tuned model, single GPU.
-- For scale: an API-based model (Claude, GPT) may be simpler and cheaper
-  than self-hosting at telephony-scale concurrency, as long as the provider
-  has a BAA.
+  context via PHI accessor) + conversation history + latest counterparty
+  utterance. Returns: agent's next response.
+- **v1: Claude API (Anthropic) with BAA.** Best instruction-following for
+  complex script execution with dynamic branching. Streaming support for
+  low latency. Managed infrastructure eliminates GPU provisioning. BAA
+  available for HIPAA compliance.
+- Local models (Gemma-4, fine-tuned smaller models) reserved for v2
+  evaluation if cost optimization is needed at scale.
 - **Latency budget:** <2s from receiving counterparty transcript to first
   TTS audio byte reaching the telephony stream. This is the total of:
   brain inference + TTS synthesis + audio encoding. Streaming both brain
   and TTS (brain streams tokens → TTS synthesizes sentence-by-sentence →
   audio streams to telephony) is the right architecture to hit this budget.
+
+### F8. Call simulator (dev/test infrastructure)
+- A fake telephony endpoint that speaks the Twilio Media Streams WebSocket
+  protocol. Replays recorded IVR audio, simulates hold music, and responds
+  with scripted rep dialogue from annotated real call recordings.
+- All IVR navigation, hold handling, and conversation development iterates
+  against the simulator first — not live calls. Saves hours of payor hold
+  time per test cycle and makes development repeatable and deterministic.
+- Extend with edge cases over time: unexpected transfers, hostile reps,
+  garbled audio, IVR loops, mid-call disconnects, simultaneous speech.
+- Lives in `simulator/` directory, separate from production code.
 
 ---
 
@@ -558,9 +571,9 @@ is reached.
 | C. Conversation | 7 | Build (brain, scripts, extraction, read-back, escalation) |
 | D. Post-call | 5 | Build (disposition, retry, storage) |
 | E. Compliance | 6 | Build + Legal (BAA procurement, audit logging, guardrails) |
-| F. Infrastructure | 7 | Build + Buy (telephony, hosting, possibly managed STT/TTS) |
+| F. Infrastructure | 8 | Build + Buy (telephony, hosting, possibly managed STT/TTS, simulator) |
 | G. Monitoring | 5 | Build (dashboard, review UI, alerting) |
-| **Total** | **42** | |
+| **Total** | **43** | |
 
 ### What you buy vs build
 
@@ -601,40 +614,63 @@ Features from `RCM_VOICE_AGENTS.md` that are NOT needed for Tier 1:
 
 ## J. Suggested Build Order for Tier 1
 
-1. **Telephony hello-world.** Place an outbound call via Twilio, play a
+**Note:** This section is the original build order. See
+`docs/PROJECT_REVIEW_AND_PLAN.md` for the revised phased plan that
+incorporates lessons from the project review (Twilio provisioning as
+long-pole, brain model commitment, call simulator, real-world data
+collection). The revised plan supersedes this section where they differ.
+
+### Phase 0 — Foundation (before building features)
+
+0. **Start Twilio HIPAA provisioning + BAA.** Long-pole dependency. In
+   parallel, get a standard Twilio dev account for non-PHI testing.
+1. **Commit brain model.** Claude API (Anthropic) for v1. Begin BAA.
+2. **Record 5–10 real claim status calls.** Human biller, highest-volume
+   payor. Transcribe and annotate IVR/hold/human/entity segments.
+3. **DB schema + migrations.** Postgres, Alembic.
+4. **Core tests.** PHI whitelist, queue transitions, disposition validation.
+5. **Structured logging + metrics scaffolding.**
+6. **Revise protocol signatures.** Telephony (add audio streaming, recording),
+   STT (async streaming), Brain (PHI accessor + script state coupling).
+   Add HoldHandler + TransferDetector abstractions.
+
+### Phase 1 — Tier 1A vertical slice
+
+1. **Call simulator.** Fake Twilio Media Streams endpoint. Replay recorded
+   IVR, hold, and rep dialogue. All development iterates here first.
+
+2. **Telephony hello-world.** Place an outbound call via Twilio, play a
    canned "hello" TTS message, record the call, hang up. Proves the
    telephony adapter works.
 
-2. **Audio pipeline.** Bidirectional audio: send TTS to the call, receive
+3. **Audio pipeline.** Bidirectional audio: send TTS to the call, receive
    audio from the call, transcribe it via STT. No brain yet — just echo
    back a transcript of what the counterparty said.
 
-3. **IVR navigator for one payor.** Pick your highest-volume payor. Map
-   their IVR. Build the navigator. Prove the agent can dial in, press
-   the right buttons, and reach the claims department. This is the
-   hardest single feature.
+4. **IVR navigator for one payor.** Build from annotated call recordings.
+   Test against the simulator. Then validate against the live payor IVR.
+   This is the hardest single feature.
 
-4. **Hold handler.** Detect hold, wait patiently, detect human pickup.
-   This can be tested by calling the payor and actually sitting through
-   hold.
+5. **Hold handler.** Detect hold, wait patiently, detect human pickup.
+   Test against simulator first, then live.
 
-5. **Claim status script + brain.** Wire the brain with the 1A script.
-   Run a live call in shadow mode: agent does the whole thing, human
-   listens and grades the disposition.
+6. **Claim status script + brain.** Wire Claude API with the 1A script,
+   PHI accessor, and conversation history. Test against simulated rep
+   dialogue, then run a live call in shadow mode.
 
-6. **Entity extraction + disposition logging.** Extract structured data
+7. **Entity extraction + disposition logging.** Extract structured data
    from the conversation, write the disposition record.
 
-7. **Dashboard + review UI.** Minimal web UI to monitor calls and review
+8. **Dashboard + review UI.** Minimal web UI to monitor calls and review
    transcripts.
 
-8. **Shadow mode on 3 payors.** Run claim status calls for your top 3
+9. **Shadow mode on 3 payors.** Run claim status calls for your top 3
    payors in shadow mode for 2 weeks. Human reviews every disposition.
    Track accuracy, escalation rate, IVR success rate.
 
-9. **Expand to 1B/1C/1D.** Add eligibility, fax lookup, auth status
-   scripts. These reuse 90% of the infrastructure — mostly new scripts
-   and entity schemas.
+10. **Expand to 1B/1C/1D.** Add eligibility, fax lookup, auth status
+    scripts. These reuse 90% of the infrastructure — mostly new scripts
+    and entity schemas.
 
-10. **Promote to production.** Enable billing system write-back for
+11. **Promote to production.** Enable billing system write-back for
     high-confidence dispositions. Human review drops to 10–20% sample.
