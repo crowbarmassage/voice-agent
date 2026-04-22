@@ -25,9 +25,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "alembic",
     "pydantic>=2.0",
-    # Web (dashboard)
+    # Web (dashboard + WebSocket)
     "fastapi",
     "uvicorn[standard]",
+    "websockets",
     # Logging
     "structlog>=24.0",
     # Config
