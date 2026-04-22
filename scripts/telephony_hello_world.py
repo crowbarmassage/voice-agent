@@ -31,14 +31,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-# Load .env if present
-_env_file = PROJECT_ROOT / ".env"
-if _env_file.exists():
-    for line in _env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+# Load .env if present — check project root and parent (~/Github/.env)
+for _env_path in [PROJECT_ROOT / ".env", PROJECT_ROOT.parent / ".env"]:
+    if _env_path.exists():
+        for line in _env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
 
 from voice_agent.logging import configure_logging, get_logger
 from voice_agent.telephony.twilio_backend import TwilioBackend
