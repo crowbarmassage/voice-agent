@@ -18,14 +18,18 @@ dependencies = [
     # TTS
     # "omnivoice",           # for OmniVoice on Apple Silicon
     # Brain
-    # "anthropic",           # for Claude API
-    # "mlx-lm",             # for local Gemma / other MLX models
+    "anthropic",             # Claude API — v1 brain (BAA available)
+    # "mlx-lm",             # for local Gemma / other MLX models (v2)
     # Data
     "psycopg[binary]",      # Postgres
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic",
     "pydantic>=2.0",
     # Web (dashboard)
     "fastapi",
     "uvicorn[standard]",
+    # Logging
+    "structlog>=24.0",
     # Config
     "pyyaml",
 ]

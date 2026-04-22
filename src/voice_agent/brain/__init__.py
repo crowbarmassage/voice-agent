@@ -27,11 +27,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Protocol
 
 from voice_agent.compliance.phi import PHIAccessor
 from voice_agent.extraction import ExtractedEntity
 from voice_agent.scripts import CallScript
+
+
+class EscalationReason(str, Enum):
+    """Why the brain wants to escalate to a human."""
+    UNANSWERABLE_QUESTION = "unanswerable_question"
+    HOSTILE_COUNTERPARTY = "hostile_counterparty"
+    UNEXPECTED_TRANSFER = "unexpected_transfer"
+    LOW_STT_CONFIDENCE = "low_stt_confidence"
+    SCRIPT_TIMEOUT = "script_timeout"
+    CLINICAL_CONTENT = "clinical_content"
+    COUNTERPARTY_REQUESTS_HUMAN = "counterparty_requests_human"
 
 
 @dataclass
@@ -41,6 +53,17 @@ class ConversationTurn:
     role: str  # "agent" or "counterparty"
     text: str
     timestamp: float  # seconds from call start
+
+
+@dataclass
+class BrainResponse:
+    """Structured response from the brain, beyond just text."""
+
+    text: str
+    should_escalate: bool = False
+    escalation_reason: EscalationReason | None = None
+    entities_to_verify: list[str] = field(default_factory=list)
+    goals_completed: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -59,6 +82,7 @@ class BrainContext:
     ai_disclosure_required: bool = True
     payor_name: str = ""
     use_case: str = ""
+    is_transfer: bool = False  # True if this is post-transfer (re-identify)
 
 
 class BrainBackend(Protocol):
@@ -76,5 +100,18 @@ class BrainBackend(Protocol):
         The brain assembles its own system prompt from the structured
         BrainContext (script goals, PHI-gated fields, extraction state).
         Callers do not construct the prompt manually.
+        """
+        ...
+
+    async def analyze_response(
+        self,
+        counterparty_text: str,
+        *,
+        context: BrainContext,
+    ) -> BrainResponse:
+        """Non-streaming analysis: extract structured decisions.
+
+        Used when the session needs a decision (escalate? which goals done?)
+        rather than streamed text. Can be called in parallel with respond().
         """
         ...

@@ -25,6 +25,16 @@ from typing import Protocol
 
 
 @dataclass
+class WordTiming:
+    """Word-level timing and confidence from STT."""
+
+    word: str
+    start_time: float
+    end_time: float
+    confidence: float
+
+
+@dataclass
 class Utterance:
     """A transcribed utterance from the counterparty."""
 
@@ -34,6 +44,7 @@ class Utterance:
     start_time: float  # seconds from call start
     end_time: float
     language: str | None = None  # detected language code (if available)
+    words: list[WordTiming] = field(default_factory=list)
 
 
 class STTBackend(Protocol):

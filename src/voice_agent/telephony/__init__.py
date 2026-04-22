@@ -9,7 +9,28 @@ See docs/TIER1_FEATURES.md §F2.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from enum import Enum
 from typing import Protocol
+
+
+class CallStatus(str, Enum):
+    """Telephony-level call status (from provider callbacks)."""
+    QUEUED = "queued"
+    RINGING = "ringing"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    BUSY = "busy"
+    NO_ANSWER = "no_answer"
+    CANCELED = "canceled"
+    FAILED = "failed"
+
+
+@dataclass
+class CallHandle:
+    """Returned by place_call — encapsulates call state."""
+    call_sid: str
+    status: CallStatus = CallStatus.QUEUED
 
 
 class TelephonyBackend(Protocol):
@@ -21,8 +42,24 @@ class TelephonyBackend(Protocol):
     — the hard parts.
     """
 
-    async def place_call(self, to: str, from_number: str) -> str:
-        """Place an outbound call. Returns call SID."""
+    async def place_call(
+        self,
+        to: str,
+        from_number: str,
+        *,
+        status_callback_url: str | None = None,
+        record: bool = False,
+        machine_detection: bool = False,
+    ) -> CallHandle:
+        """Place an outbound call. Returns a CallHandle with call SID.
+
+        Args:
+            to: Destination phone number (E.164 format).
+            from_number: Caller ID number (E.164).
+            status_callback_url: Webhook URL for call status events.
+            record: Whether to record the call from the start.
+            machine_detection: Enable answering machine detection.
+        """
         ...
 
     async def send_dtmf(self, call_sid: str, digits: str) -> None:
@@ -46,6 +83,14 @@ class TelephonyBackend(Protocol):
         """
         ...
 
+    async def play_tts(self, call_sid: str, text: str, voice: str = "Polly.Joanna") -> None:
+        """Play text-to-speech via the telephony provider's built-in TTS.
+
+        Useful for telephony hello-world and simple messages without
+        needing our own TTS pipeline. Uses provider's TTS engine.
+        """
+        ...
+
     async def transfer(self, call_sid: str, to: str) -> None:
         """Transfer the call to another number (for warm handoff to human)."""
         ...
@@ -56,4 +101,8 @@ class TelephonyBackend(Protocol):
 
     async def get_recording_url(self, call_sid: str) -> str | None:
         """Get the URL of the call recording after the call ends."""
+        ...
+
+    async def get_call_status(self, call_sid: str) -> CallStatus:
+        """Poll current call status from the provider."""
         ...
