@@ -24,6 +24,8 @@ from voice_agent.audio.vad import SpeechState, VAD
 from voice_agent.brain import BrainBackend, BrainContext, ConversationTurn
 from voice_agent.compliance.phi import PHIAccessor
 from voice_agent.events import CallEvent, EventType
+from voice_agent.extraction import ExtractedEntity, ExtractionResult
+from voice_agent.extraction.patterns import extract_from_text
 from voice_agent.ivr import IVRActionType, IVRConfig, IVRNavigator, IVRRule
 from voice_agent.logging import get_logger
 from voice_agent.metrics import metrics
@@ -72,6 +74,7 @@ class SessionRunner:
         # Conversation state
         self._transcripts: list[Utterance] = []
         self._conversation_history: list[ConversationTurn] = []
+        self._extracted_entities: ExtractionResult = ExtractionResult()
         self._transcript_queue: asyncio.Queue[Utterance] = asyncio.Queue()
         self._cancel_tts = asyncio.Event()
         self._call_start_time = 0.0
@@ -91,6 +94,10 @@ class SessionRunner:
     @property
     def conversation_history(self) -> list[ConversationTurn]:
         return list(self._conversation_history)
+
+    @property
+    def extracted_entities(self) -> list[ExtractedEntity]:
+        return list(self._extracted_entities.entities)
 
     async def run(self) -> None:
         """Run the full call lifecycle."""
@@ -295,6 +302,31 @@ class SessionRunner:
             details={"text": text[:200]},
         )
 
+        # Run entity extraction on counterparty utterance
+        stt_conf = utterance.confidence if utterance else 0.85
+        pattern_result = extract_from_text(text, stt_confidence=stt_conf)
+        if pattern_result.entities:
+            self._extracted_entities.merge(pattern_result)
+            for entity in pattern_result.entities:
+                self._log.info(
+                    "entity_extracted",
+                    name=entity.name,
+                    value=entity.value,
+                    confidence=round(entity.confidence, 2),
+                    source=entity.source,
+                )
+                self._session._emit_event(
+                    EventType.ENTITY_EXTRACTED,
+                    details={
+                        "name": entity.name,
+                        "value": entity.value,
+                        "confidence": entity.confidence,
+                    },
+                )
+
+        # Try LLM extraction in background (non-blocking)
+        asyncio.create_task(self._llm_extract(text, stt_conf))
+
         if not self._brain or not self._script:
             self._log.debug("no_brain_configured, skipping response")
             return
@@ -340,6 +372,30 @@ class SessionRunner:
                 EventType.AGENT_UTTERANCE,
                 details={"text": full_response[:200]},
             )
+
+    async def _llm_extract(self, text: str, stt_confidence: float) -> None:
+        """Run LLM extraction in background and merge results."""
+        try:
+            from voice_agent.extraction.llm import extract_with_llm
+            context = "\n".join(
+                f"{'REP' if t.role == 'counterparty' else 'AGENT'}: {t.text}"
+                for t in self._conversation_history[-6:]
+            )
+            result = await extract_with_llm(text, context, stt_confidence=stt_confidence)
+            if result.entities:
+                self._extracted_entities.merge(result)
+                for entity in result.entities:
+                    if not any(
+                        e.name == entity.name and e.source == "pattern"
+                        for e in self._extracted_entities.entities
+                    ):
+                        self._log.info(
+                            "entity_extracted_llm",
+                            name=entity.name,
+                            value=entity.value,
+                        )
+        except Exception as e:
+            self._log.debug("llm_extract_error", error=str(e))
 
     # ── Audio processing ──
 
