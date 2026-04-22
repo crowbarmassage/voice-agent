@@ -1,0 +1,63 @@
+# Payor profile template.
+# Copy this file, rename to <payor_name>.yaml, and fill in.
+# See docs/TIER1_FEATURES.md §A4 for field descriptions.
+
+name: "Payor Name"
+
+phone_numbers:
+  claims: "1-800-XXX-XXXX"
+  eligibility: "1-800-XXX-XXXX"
+  auth: "1-800-XXX-XXXX"
+  provider_services: "1-800-XXX-XXXX"
+
+timezone: "America/New_York"
+
+business_hours:
+  start: "08:00"
+  end: "18:00"
+  days: "mon-fri"
+
+# Max minutes to stay on hold before hanging up and retrying
+max_hold_minutes: 90
+
+# Max simultaneous calls to this payor's numbers (avoid getting blocked)
+max_concurrent_calls: 5
+
+# Whether the agent must identify itself as AI at call start
+ai_disclosure_required: true
+
+# IVR navigation map — state machine definition
+# Each entry: prompt pattern → action (dtmf digits, speech, or wait)
+ivr:
+  claims:
+    - prompt_contains: "press 1 for claims"
+      action: dtmf
+      value: "1"
+    - prompt_contains: "enter your NPI"
+      action: dtmf
+      value: "{npi}"          # replaced from claim context at runtime
+    - prompt_contains: "enter your tax ID"
+      action: dtmf
+      value: "{tax_id}"
+    - prompt_contains: "press 0"
+      action: dtmf
+      value: "0"              # fallback: press 0 for operator
+
+  eligibility:
+    - prompt_contains: "press 2 for eligibility"
+      action: dtmf
+      value: "2"
+    - prompt_contains: "enter your NPI"
+      action: dtmf
+      value: "{npi}"
+
+  auth:
+    - prompt_contains: "press 3 for authorizations"
+      action: dtmf
+      value: "3"
+
+# Known quirks about this payor (for the agent and for human operators)
+notes: |
+  - Example: "Always asks for tax ID before NPI, unlike most payors."
+  - Example: "Claims line disconnects after 90 min hold."
+  - Example: "IVR changed in March 2026 — updated map on 2026-04-15."

@@ -1,0 +1,60 @@
+[project]
+name = "voice-agent"
+version = "0.1.0"
+description = "RCM outbound voice agent platform"
+requires-python = ">=3.12"
+dependencies = [
+    # Telephony
+    "twilio>=9.0",
+    # Audio
+    "sounddevice",
+    "soundfile",
+    "numpy",
+    # VAD
+    "silero-vad",
+    # STT (pick one or both)
+    # "mlx-audio",           # for Granite / Whisper on Apple Silicon
+    # "faster-whisper",      # for CPU/GPU via CTranslate2
+    # TTS
+    # "omnivoice",           # for OmniVoice on Apple Silicon
+    # Brain
+    # "anthropic",           # for Claude API
+    # "mlx-lm",             # for local Gemma / other MLX models
+    # Data
+    "psycopg[binary]",      # Postgres
+    "pydantic>=2.0",
+    # Web (dashboard)
+    "fastapi",
+    "uvicorn[standard]",
+    # Config
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+mlx = [
+    "mlx-audio",
+    "mlx-lm",
+    "torch",
+    "omnivoice",
+]
+cloud = [
+    "anthropic",
+    "google-cloud-speech",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
