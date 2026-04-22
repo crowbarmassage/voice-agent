@@ -132,6 +132,30 @@ Try saying:
 
 ---
 
+## How the Call Ends
+
+The call can end in three ways:
+
+1. **Normal close** — After the agent thanks you and says goodbye, say
+   "goodbye" or "bye" back. The system detects this and hangs up cleanly.
+   This is the ideal ending.
+
+2. **You hang up** — You can hang up your phone at any time. The system
+   will detect the disconnect and log the call as completed. This is fine
+   for testing.
+
+3. **Agent closes** — If you trigger a guardrail that causes the agent to
+   give up (e.g., hostile rep test, "call back later"), the agent will say
+   something like "A member of our team will call back. Thank you." and the
+   call will end.
+
+**Important:** The word "goodbye" is the signal that ends the call. Don't say
+it mid-conversation unless you want the call to end. If you're testing
+guardrails and want to keep going, avoid saying "goodbye" until you're
+actually done.
+
+---
+
 ## Tips for a Good Test
 
 - **Speak clearly** and at a normal pace — not too fast
