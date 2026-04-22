@@ -52,6 +52,8 @@ from fastapi.responses import Response
 from voice_agent.brain.gemini import GeminiBrain
 from voice_agent.brain import BrainContext, ConversationTurn
 from voice_agent.compliance.phi import PHIAccessor
+from voice_agent.extraction import ExtractionResult
+from voice_agent.extraction.patterns import extract_from_text
 from voice_agent.logging import configure_logging, get_logger
 from voice_agent.scripts.claim_status import create_claim_status_script
 
@@ -72,6 +74,7 @@ phi = PHIAccessor("claim_status", {
 conversation_history: list[ConversationTurn] = []
 call_start_time = time.monotonic()
 turn_count = 0
+all_entities = ExtractionResult()
 
 
 def _build_context() -> BrainContext:
@@ -177,6 +180,13 @@ async def gather_webhook(
         )
     )
 
+    # Extract entities from what the rep said
+    extraction = extract_from_text(text, stt_confidence=confidence)
+    if extraction.entities:
+        all_entities.merge(extraction)
+        for e in extraction.entities:
+            log.info("entity_extracted", name=e.name, value=e.value, confidence=round(e.confidence, 2))
+
     # Check for goodbye signals
     goodbye_phrases = ["goodbye", "bye", "that's all", "hang up", "end call"]
     if any(phrase in text.lower() for phrase in goodbye_phrases):
@@ -228,12 +238,31 @@ async def status_webhook(CallStatus: str = Form(""), CallSid: str = Form("")):
 
     if CallStatus == "completed":
         print(f"\n{'='*60}")
-        print(f"Call completed. {turn_count} conversation turns.")
-        print(f"\nTranscript:")
+        print(f"CALL COMPLETED — {turn_count} conversation turns")
+        print(f"{'='*60}")
+
+        print(f"\n📋 TRANSCRIPT:")
         for turn in conversation_history:
-            role = "YOU  " if turn.role == "counterparty" else "AGENT"
+            role = "REP  " if turn.role == "counterparty" else "AGENT"
             print(f"  [{role}] {turn.text}")
-        print(f"{'='*60}\n")
+
+        print(f"\n📊 EXTRACTED ENTITIES:")
+        if all_entities.entities:
+            for e in all_entities.entities:
+                verified = " ✓" if e.verified else ""
+                print(f"  {e.name:25s} = {e.value:30s} (conf: {e.confidence:.2f}, src: {e.source}{verified})")
+        else:
+            print("  (none extracted)")
+
+        # PHI fields that were disclosed
+        print(f"\n🔒 PHI FIELDS DISCLOSED:")
+        if phi.accessed_fields:
+            for field in phi.accessed_fields:
+                print(f"  - {field}")
+        else:
+            print("  (none)")
+
+        print(f"\n{'='*60}\n")
 
 
 async def start_ngrok(port: int) -> str:
