@@ -18,7 +18,8 @@ dependencies = [
     # TTS
     # "omnivoice",           # for OmniVoice on Apple Silicon
     # Brain
-    "anthropic",             # Claude API — v1 brain (BAA available)
+    "google-genai",          # Gemini API — v1 brain
+    # "anthropic",           # Claude API (alternative brain with BAA)
     # "mlx-lm",             # for local Gemma / other MLX models (v2)
     # Data
     "psycopg[binary]",      # Postgres

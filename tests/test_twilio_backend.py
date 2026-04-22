@@ -71,12 +71,14 @@ class TestTwilioBackendPlaceCall:
             await backend.place_call("+18005551234")
 
     @pytest.mark.asyncio
+    @patch.dict("os.environ", {"TWILIO_FROM_NUMBER": ""}, clear=False)
     async def test_place_call_requires_from_number(self):
         backend = TwilioBackend(
             account_sid="ACtest",
             auth_token="token",
             from_number="",
         )
+        backend.from_number = ""  # force empty even if env was loaded at init
         with pytest.raises(ValueError, match="from_number"):
             await backend.place_call("+18005551234", twiml="<Response/>")
 
