@@ -309,54 +309,40 @@ def main():
     print(f"Patient: Jane Doe, DOB 1985-03-15, Claim CLM-2026-001")
     print(f"{'='*60}\n")
 
-    # Start ngrok in background
-    print("Starting ngrok tunnel...")
-    ngrok_proc = subprocess.Popen(
-        ["ngrok", "http", str(args.port), "--log=stdout", "--log-format=json"],
+    # Start cloudflared tunnel (no interstitial, free)
+    print("Starting cloudflared tunnel...")
+    tunnel_proc = subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", f"http://localhost:{args.port}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
 
-    # Wait for ngrok URL
-    import json as _json
-    ngrok_url = None
-    for _ in range(50):
-        line = ngrok_proc.stdout.readline()
+    # cloudflared prints the URL to stderr
+    import re as _re
+    tunnel_url = None
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        line = tunnel_proc.stderr.readline()
         if not line:
             time.sleep(0.1)
             continue
-        try:
-            data = _json.loads(line.decode())
-            if data.get("url"):
-                ngrok_url = data["url"]
-                break
-        except (_json.JSONDecodeError, UnicodeDecodeError):
-            continue
+        text = line.decode("utf-8", errors="ignore")
+        match = _re.search(r"(https://[a-z0-9-]+\.trycloudflare\.com)", text)
+        if match:
+            tunnel_url = match.group(1)
+            break
 
-    if not ngrok_url:
-        time.sleep(2)
-        try:
-            import urllib.request
-            resp = urllib.request.urlopen("http://localhost:4040/api/tunnels")
-            tunnels = _json.loads(resp.read())
-            for t in tunnels.get("tunnels", []):
-                if t.get("proto") == "https":
-                    ngrok_url = t["public_url"]
-                    break
-        except Exception:
-            pass
-
-    if not ngrok_url:
-        print("ERROR: Could not get ngrok URL. Is ngrok authenticated?")
-        ngrok_proc.kill()
+    if not tunnel_url:
+        print("ERROR: Could not get cloudflared URL.")
+        tunnel_proc.kill()
         sys.exit(1)
 
-    print(f"ngrok URL: {ngrok_url}")
-    print(f"Webhook: {ngrok_url}/voice")
+    print(f"Tunnel URL: {tunnel_url}")
+    print(f"Webhook: {tunnel_url}/voice")
 
     # Store for the startup event
     _startup_config["to"] = args.to
-    _startup_config["ngrok_url"] = ngrok_url
+    _startup_config["ngrok_url"] = tunnel_url
 
     # Run the webhook server — call is placed in on_startup after server is ready
     try:
@@ -364,8 +350,8 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
-        ngrok_proc.kill()
-        ngrok_proc.wait()
+        tunnel_proc.kill()
+        tunnel_proc.wait()
 
 
 if __name__ == "__main__":
