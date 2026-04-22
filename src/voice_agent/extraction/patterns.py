@@ -137,9 +137,10 @@ def extract_from_text(text: str, stt_confidence: float = 0.85) -> ExtractionResu
     if ref:
         result.entities.append(ref)
 
-    # Dates
+    # Dates — with context-aware labeling
     dates = _extract_dates(text_lower, stt_confidence)
     for d in dates:
+        d.name = _label_date(text_lower, d.value)
         result.entities.append(d)
 
     # Dollar amounts
@@ -213,6 +214,50 @@ def extract_from_text(text: str, stt_confidence: float = 0.85) -> ExtractionResu
         ))
 
     return result
+
+
+def _label_date(text_lower: str, date_value: str) -> str:
+    """Determine the semantic label for an extracted date based on surrounding context."""
+    parts = date_value.split("-")
+    if len(parts) != 3:
+        return "date"
+    month_num, day = parts[1], parts[2]
+
+    # Find the date's position in text — try month name or numeric format
+    pos = -1
+    for name, num in _MONTH_MAP.items():
+        if num == month_num and name in text_lower:
+            pos = text_lower.index(name)
+            break
+    if pos == -1:
+        # Try numeric formats: "04/01" or "4/1" or "04-01"
+        for fmt in [f"{month_num}/{day}", f"{int(month_num)}/{int(day)}",
+                    f"{month_num}-{day}"]:
+            if fmt in text_lower:
+                pos = text_lower.index(fmt)
+                break
+
+    if pos == -1:
+        return "date"
+
+    # Check 80 chars before the date for context clues
+    context_before = text_lower[max(0, pos - 80):pos]
+
+    cue_map = [
+        (["expected", "finalize", "process by", "estimated", "should be",
+          "will be", "anticipated", "target", "due by", "due date"], "expected_date"),
+        (["received", "submitted", "filed", "billed", "sent",
+          "date of service", "service date"], "received_date"),
+        (["paid", "check", "eft", "issued", "payment"], "payment_date"),
+        (["effective", "start date", "begin"], "effective_date"),
+        (["term", "end date", "expires", "expiration"], "term_date"),
+    ]
+
+    for cues, label in cue_map:
+        if any(cue in context_before for cue in cues):
+            return label
+
+    return "date"
 
 
 def _extract_reference(text: str, text_lower: str, stt_confidence: float) -> ExtractedEntity | None:

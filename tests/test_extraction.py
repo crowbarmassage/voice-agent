@@ -61,29 +61,54 @@ class TestReferenceExtraction:
 
 
 class TestDateExtraction:
-    def test_month_day(self):
+    def test_expected_date(self):
         r = extract_from_text("Expected to finalize by May 15.")
-        e = r.get("date")
+        e = r.get("expected_date")
         assert e is not None
         assert "05-15" in e.value
 
-    def test_month_ordinal(self):
+    def test_expected_date_ordinal(self):
         r = extract_from_text("It should process by May fifteenth.")
-        e = r.get("date")
+        e = r.get("expected_date")
         assert e is not None
         assert "05-15" in e.value
 
-    def test_month_day_year(self):
+    def test_expected_date_with_year(self):
         r = extract_from_text("Payment expected April 1, 2026.")
-        e = r.get("date")
+        e = r.get("expected_date")
         assert e is not None
         assert e.value == "2026-04-01"
 
-    def test_numeric_date(self):
+    def test_received_date(self):
         r = extract_from_text("Received on 04/01/2026.")
-        e = r.get("date")
+        e = r.get("received_date")
         assert e is not None
         assert e.value == "2026-04-01"
+
+    def test_two_dates_labeled_differently(self):
+        """The key bug: rep says both received date and expected date."""
+        r = extract_from_text(
+            "It was received on April first and is expected to finalize "
+            "by May fifteenth."
+        )
+        received = r.get("received_date")
+        expected = r.get("expected_date")
+        assert received is not None, "Should extract received_date"
+        assert expected is not None, "Should extract expected_date"
+        assert "04-01" in received.value
+        assert "05-15" in expected.value
+
+    def test_payment_date(self):
+        r = extract_from_text("Check was issued on April tenth.")
+        e = r.get("payment_date")
+        assert e is not None
+        assert "04-10" in e.value
+
+    def test_unlabeled_date(self):
+        """Date without context clues gets generic 'date' label."""
+        r = extract_from_text("The date is March 20.")
+        e = r.get("date")
+        assert e is not None
 
 
 class TestDollarExtraction:
@@ -162,8 +187,10 @@ class TestFullUtterance:
         assert r.get("claim_status").value == "pending"
         assert r.get("reference_number") is not None
         assert r.get("reference_number").value == "AB4472"
-        dates = [e for e in r.entities if e.name == "date"]
-        assert len(dates) >= 1
+        assert r.get("received_date") is not None
+        assert "04-01" in r.get("received_date").value
+        assert r.get("expected_date") is not None
+        assert "05-15" in r.get("expected_date").value
 
     def test_empty_utterance(self):
         r = extract_from_text("")
