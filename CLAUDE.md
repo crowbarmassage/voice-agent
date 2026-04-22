@@ -68,7 +68,7 @@ See `docs/RCM_VOICE_AGENTS.md` for all tiers and the full feature requirements.
 | Telephony | Twilio HIPAA | BAA available, Media Streams for audio |
 | STT | Granite 4.0 1b Speech (mlx-audio) or cloud STT with BAA | Keyword biasing for medical terms |
 | TTS | OmniVoice or cloud TTS | Professional, telephony-optimized voice |
-| Brain | Claude API (Anthropic) — v1 default | BAA available, best instruction-following for script execution, streaming |
+| Brain | Gemini API (gemini-3.1-flash-lite-preview) — v1 default | Fast, streaming, good instruction-following |
 | VAD | Silero VAD | Lightweight, MIT, runs on CPU |
 | Queue | Postgres | Work items, dispositions, audit log |
 | Monitoring | Grafana + Postgres | Call dashboard, metrics |
@@ -110,8 +110,8 @@ voice-agent/
 
 ## Key decisions made
 
-- **Brain: Claude API (Anthropic) for v1.** Best instruction-following for
-  script execution, streaming for low latency, managed infra. BAA available.
+- **Brain: Gemini API (gemini-3.1-flash-lite-preview) for v1.** Fast streaming,
+  good instruction-following for script execution. Validated at 785ms TTFT.
   Local models (Gemma-4) reserved for v2 cost optimization evaluation.
 - **Shadow mode mandatory.** v1 never writes to billing system automatically.
   Human reviews all dispositions.
